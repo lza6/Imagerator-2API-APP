@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Imagerator 2API Demo — AI 图片/视频生成</title>
+<style>
+  :root { --bg:#0f1117; --card:#1a1d27; --acc:#7c5cff; --txt:#e8e9ef; --mut:#8b8fa3; }
+  * { box-sizing:border-box; margin:0; padding:0; font-family:'Segoe UI',system-ui,sans-serif; }
+  body { background:var(--bg); color:var(--txt); min-height:100vh; padding:24px; }
+  .wrap { max-width:960px; margin:0 auto; }
+  h1 { font-size:22px; margin-bottom:4px; } h1 span { color:var(--acc); }
+  .sub { color:var(--mut); font-size:13px; margin-bottom:24px; }
+  .card { background:var(--card); border-radius:14px; padding:20px; margin-bottom:18px; border:1px solid #262a38; }
+  .card h2 { font-size:15px; margin-bottom:12px; color:var(--acc); }
+  textarea, input, select { width:100%; background:#12141c; border:1px solid #2c3040; color:var(--txt);
+    border-radius:8px; padding:10px 12px; font-size:14px; margin-bottom:10px; outline:none; }
+  textarea { min-height:80px; resize:vertical; }
+  button { background:var(--acc); color:#fff; border:none; border-radius:8px; padding:11px 22px;
+    font-size:14px; font-weight:600; cursor:pointer; }
+  button:disabled { opacity:.5; cursor:wait; }
+  button.ghost { background:#2c3040; }
+  .row { display:flex; gap:10px; } .row > * { flex:1; }
+  #imgOut img, #vidOut video { max-width:100%; border-radius:10px; margin-top:12px; display:block; }
+  .status { color:var(--mut); font-size:13px; margin-top:8px; min-height:18px; }
+  .credits { float:right; color:var(--mut); font-size:12px; }
+  .log { font-family:Consolas,monospace; font-size:11px; color:var(--mut); white-space:pre-wrap;
+    max-height:120px; overflow:auto; margin-top:10px; background:#12141c; padding:8px; border-radius:8px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>🔓 Imagerator <span>2API</span> Demo</h1>
+  <div class="sub">上游: techinfortainment.com/ai-generation · 鉴权: device_id(android_id) · 协议: 明文 JSON/Multipart · 本地端口 8902</div>
+
+  <div class="card">
+    <h2>文本生图 (text2image / text2image Flux / NanoBanana)</h2>
+    <textarea id="imgPrompt" placeholder="例：一只戴墨镜的柴犬在冲浪，赛博朋克风格">a cute orange cat sitting on a windowsill, sunny day, photorealistic</textarea>
+    <div class="row">
+      <select id="imgModel">
+        <option value="imagerator-turbo">Turbo (ZImageTurbo_INT8, 1 credit)</option>
+        <option value="imagerator-flux">Flux (Flux1schnell, 1 credit)</option>
+        <option value="imagerator-nanobanana">NanoBanana (2 credits)</option>
+      </select>
+      <select id="imgSize">
+        <option value="720x1280">720×1280</option>
+        <option value="1024x1024">1024×1024</option>
+        <option value="1280x720">1280×720</option>
+      </select>
+    </div>
+    <button id="btnImg" onclick="genImage()">生成图片</button>
+    <div class="status" id="imgStatus"></div>
+    <div id="imgOut"></div>
+  </div>
+
+  <div class="card">
+    <h2>文生视频 (text2video — LTXV 13B, 2 credits, 异步约 1-5 分钟)</h2>
+    <textarea id="vidPrompt" placeholder="例：海浪拍打礁石慢动作特写">ocean waves crashing on rocks, slow motion, cinematic</textarea>
+    <button id="btnVid" onclick="genVideo()">提交视频任务</button>
+    <button class="ghost" id="btnPoll" onclick="pollVideo()" disabled>查询结果</button>
+    <div class="status" id="vidStatus"></div>
+    <div id="vidOut"></div>
+  </div>
+
+  <div class="card">
+    <h2>设备池 / Credits <span class="credits" id="poolInfo"></span></h2>
+    <button class="ghost" onclick="refresh()">刷新余额 / 健康状态</button>
+    <div class="log" id="log"></div>
+  </div>
+</div>
+
+<script>
+const API = location.origin;
+let jobId = null;
+function log(s){ const l=document.getElementById('log'); l.textContent = new Date().toLocaleTimeString()+'  '+s+'\n'+l.textContent; }
+async function refresh(){
+  try {
+    const h = await (await fetch(API+'/health')).json();
+    document.getElementById('poolInfo').textContent = `pool=${h.pool} upstream=${h.upstream}`;
+    log('health ok, pool='+h.pool);
+  } catch(e){ log('health err: '+e); }
+}
+async function genImage(){
+  const btn=document.getElementById('btnImg'); btn.disabled=true;
+  const st=document.getElementById('imgStatus'); st.textContent='提交中…';
+  document.getElementById('imgOut').innerHTML='';
+  try {
+    const r = await fetch(API+'/v1/images/generations',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:imgModel.value, prompt:imgPrompt.value, size:imgSize.value})});
+    const j = await r.json();
+    if (j.error) throw new Error(JSON.stringify(j.error).slice(0,200));
+    st.textContent='完成 ✓';
+    document.getElementById('imgOut').innerHTML = `<img src="${j.data[0].url}" alt="result">`;
+    log('image ok: '+j.data[0].url);
+  } catch(e){ st.textContent='失败: '+e.message; log('img err: '+e.message); }
+  btn.disabled=false;
+}
+async function genVideo(){
+  const btn=document.getElementById('btnVid'); btn.disabled=true;
+  const st=document.getElementById('vidStatus'); st.textContent='提交任务中…';
+  try {
+    const r = await fetch(API+'/v1/video/generations',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({prompt:vidPrompt.value, size:'720x1280'})});
+    const j = await r.json();
+    if (j.error) throw new Error(JSON.stringify(j.error).slice(0,200));
+    jobId = j.id; st.textContent='任务已提交 '+j.id+'，点击"查询结果"轮询（视频生成约 1-5 分钟）';
+    document.getElementById('btnPoll').disabled=false;
+    log('video job: '+j.id);
+  } catch(e){ st.textContent='失败: '+e.message; log('vid err: '+e.message); }
+  btn.disabled=false;
+}
+async function pollVideo(){
+  const st=document.getElementById('vidStatus');
+  try {
+    const j = await (await fetch(API+'/v1/video/generations/'+jobId)).json();
+    st.textContent = '状态: '+j.status+'  进度: '+j.progress+'%';
+    if (j.status==='completed' && j.video_url){
+      document.getElementById('vidOut').innerHTML = `<video src="${j.video_url}" controls autoplay loop></video>`;
+      log('video ok: '+j.video_url);
+    }
+  } catch(e){ st.textContent='查询失败: '+e.message; }
+}
+refresh();
+</script>
+</body>
+</html>

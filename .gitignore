@@ -1,0 +1,8 @@
+apk-unzip/
+jadx-out/
+jadx.log
+server.log
+device_pool.json
+__pycache__/
+app.apk
+*.apk
