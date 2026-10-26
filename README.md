@@ -70,9 +70,21 @@ python demo_server.py        # 0.0.0.0:8902
 - ✅ 注册：HTTP 200，`{"credits":20,"plan":"Ads"}`（30 为 register_credits 配置，实测拿到 20/30 均有）
 - ✅ 文生图（Turbo）：~20s 完成，真实图片输出
 - ✅ 图生图（Flux_2_Klein_4B_BF16）：~9s 完成，真实图片输出
-- ✅ 文生视频（LTXV 13B）：任务接受；首次上游内部失败，重试中
+- ⚠️ 文生视频（LTXV 13B）：任务接受正常（`request_id` 返回），但上游成功率低 —— 3 次实测：1 次上游内部 `failed`、1 次内容审核 `blocked`（"Content not allowed"，连热气球这类完全无害提示词也会误拦）、视频生成约需 1-5 分钟
 - ✅ 本地压测（仅压 demo server 自身，不压上游）：`/health` 310 rps@10 并发、188 rps@60 并发；参数校验路径 90/90 正确 400
 - 坑：`curl` 需 `--ssl-no-revoke`（schannel 证书吊销检查离线失败）
+
+## 自动化号池（device-pool）
+上游注册**无任何验证**（无 CAPTCHA/设备指纹/IP 绑定），`device_id` 就是 32 位 hex，伪造零成本：
+```
+get_device() 三级回退:
+1. 本地池找余额 ≥1 的设备 (O(1), 并发安全 _pool_lock)
+2. 全欠费 → 向上游 /users/{id}/credits 同步真实余额 (本地计数可能偏低)
+3. 仍无 → 注册新号 (uuid4().hex, 送 20~30 credits, 重试 3 次)
+```
+- `device_pool.json` 持久化：重启不丢号
+- `deduct()` 扣减后落盘；`/health` 返回池明细 + 总余额
+- 理论产能：每号 ~20-30 credits，号池自动滚动 = 实际无限免费额度（受上游 IP 风控约束，建议低频使用）
 
 ## 代码位置
 - `demo_server.py` / `demo.html` — 网关 + 网页
