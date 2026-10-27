@@ -97,5 +97,12 @@ get_device() 三级回退:
   - `p078j6/C1350b.java` — 注册/余额/广场/推荐
   - `D3/AbstractC0316x6.java` — device_id = ANDROID_ID
 
+## 已移植进 new-api（生产）
+渠道 type 66 已合并进 [lza6/new-api-Max](https://github.com/lza6/new-api-Max)（v1.3.211 上线）：
+- `relay/channel/imagerator/` — 适配器（images + chat 双模）+ Go 自动化号池（三级回退自动注册）
+- 2API 管理面板 + 模型广场徽标已接入
+- 部署脚本：`deploy/post-deploy-imagerator.sh`
+- 排障要点：上游对空 device_id 不自动生成（必须客户端自带）；passthrough 场景需在 DoRequest 补默认字段
+
 ## 免责声明
 仅供安全研究与协议学习。上游为第三方生产服务，请勿高频滥用；生成的请求全部使用自注册设备号。
